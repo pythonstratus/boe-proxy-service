@@ -1,0 +1,19 @@
+# ──────────────────────────────────────────────────────────────────────
+# Local Development Profile
+# Activate with: --spring.profiles.active=local
+# ──────────────────────────────────────────────────────────────────────
+
+eag:
+  base-url: https://vl2smtbappboe24.dstest.abc.com:6405
+  mtls:
+    enabled: false
+
+boe:
+  auth:
+    username: local_dev_user
+    password: local_dev_password
+
+logging:
+  level:
+    com.dstest.boe.proxy: DEBUG
+    org.springframework.web.reactive.function.client: TRACE

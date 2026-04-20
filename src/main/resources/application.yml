@@ -1,0 +1,71 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: boe-proxy-service
+
+# ──────────────────────────────────────────────────────────────────────
+# EAG Gateway Configuration
+# ──────────────────────────────────────────────────────────────────────
+eag:
+  base-url: ${EAG_BASE_URL:https://eag-gateway.dstest.abc.com}
+  timeout:
+    connect: 10s
+    read: 60s
+  mtls:
+    enabled: ${MTLS_ENABLED:false}
+    cert-path: ${MTLS_CERT_PATH:}
+    key-path: ${MTLS_KEY_PATH:}
+
+# ──────────────────────────────────────────────────────────────────────
+# BOE / Raylight Configuration
+# ──────────────────────────────────────────────────────────────────────
+boe:
+  api-path: /biprws
+  raylight-path: /biprws/raylight/v1
+  auth:
+    username: ${BOE_USERNAME:}
+    password: ${BOE_PASSWORD:}
+    type: secEnterprise
+  token:
+    refresh-threshold: 15m
+    max-age: 25m
+
+# ──────────────────────────────────────────────────────────────────────
+# Proxy Service Configuration
+# ──────────────────────────────────────────────────────────────────────
+proxy:
+  polling:
+    initial-delay: 3s
+    fast-interval: 3s
+    slow-interval: 10s
+    max-duration: 10m
+    max-attempts: 60
+  job-tracker:
+    cleanup-after: 30m
+  circuit-breaker:
+    failure-threshold: 5
+    reset-interval: 30s
+    failure-window: 60s
+
+# ──────────────────────────────────────────────────────────────────────
+# Actuator / Health
+# ──────────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ──────────────────────────────────────────────────────────────────────
+# Logging
+# ──────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    root: INFO
+    com.dstest.boe.proxy: DEBUG
+    org.springframework.web.reactive.function.client: DEBUG
