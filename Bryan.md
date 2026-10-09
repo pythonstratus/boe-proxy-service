@@ -36,3 +36,18 @@ Also, Toad was connected to DEV2. Can you confirm that's the database behind the
 That should tell us which issues are data and which are code.
 
 ```
+
+```
+
+1. Build the ELEVEL 7 Group/Self mode (core fix)
+    ◦ Goal: an ELEVEL 7 user can switch between Group (all employees in the acting group, here 220617xx) and Self (own ROID only). Every screen follows that choice.
+    ◦ entity-ui: Keep the mode in roleSlice.ts next to the current role, saved in local storage under the user's SEID. EntityHeader.tsx shows it in "Viewing as," and Change Access offers the Group/Self choice for ELEVEL 7.
+    ◦ API calls: Extend changeRole to accept Group or Self for ELEVEL 7. Send the mode on every data request; a request interceptor keeps this consistent.
+    ◦ entity-service: Validate the mode on every request against the active assignment from getAssignmentForUser. The mode can only narrow access: Group is allowed only for an ELEVEL 7 user, and only for their acting group. Anything else falls back to the user's normal scope.
+    ◦ Menus: Case Assignment and Time Verification appear in Group mode only. Self mode gets the ELEVEL 8 menu.
+    ◦ Reset rules: Clear the saved mode on logout, on an assignment switch and on a role change. At login, reset it if it isn't valid for the current assignment. Each switch rebuilds filters and cached query results from scratch.
+    ◦ No new table: USER_SESSIONS came from an early design draft and doesn't exist in the code.
+    ◦ Still open: the default mode at login (prompt or Group), and whether each browser tab keeps its own mode (session storage) or shares one (local storage).
+    ◦ Done when: an AGM can switch both ways, and header, Viewing as, data and menus change immediately. An ELEVEL 8 user who sets Group in local storage still sees only their own data.
+
+```
