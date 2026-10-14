@@ -129,3 +129,75 @@ No changes are needed in `QueryBuilderDateType.tsx`. Lines 107 to 109 send every
 **Still pending:** the ARANK check query from earlier. If it shows `[99a ]` with the space at the end instead of the front, tell me before you test, because the padding would be on the wrong side.
 
 **Separate from this ticket:** line 107 of `QueryBuilderDateType.tsx` checks for `'empty'` and `'notEmpty'`, but the operators are actually named `'null'` and `'notNull'`. So date fields still show a date picker when Empty is selected. That's a one-word fix, but I'd keep it out of this pull request.
+
+## 4
+
+I'll turn these into code now. One thing from your screenshots: Excel column C is hidden. The formula bar shows its header is "Modernized Field Name Update", which is the label users see in Modern. I'll ask you to unhide it for the next batch.
+
+Now I'll type-check it against the real react-querybuilder types and verify every list count against the spreadsheet row counts.
+
+The package registry isn't reachable from here, so I'll type-check against a minimal stand-in for the library's `Field` type and run the count checks with Node directly.
+
+Every count matches the spreadsheet's row count, there are no duplicate codes, and the Priority lists still work in every view.
+
+I've rebuilt `fieldListUtils.ts` with every pick list from these screenshots, from BOD Division Code through CSED/ASED. The Case view and GM Case Assignment are wired up. The Module, Activity and Time lists are written into the file, but they only appear once I have those views' column names.
+
+**One edit in QueryBuilderHelper.ts, line 427.** Each dropdown now depends on which view it's in, so change `}).map(withPickList);` to:
+
+```ts
+}).map((f) => withPickList(f, currentNav));
+```
+
+If you skip this, TypeScript will show an error, so it can't be missed. The other three edits stay as they are.
+
+**What's wired in the Case view**
+
+| List (control #) | Values | Column | Confidence |
+|---|---|---|---|
+| BOD Division Code (10) | 4 | BODCD | Likely |
+| Case Code (15) | 17 | CASECODE | Sure |
+| Case Grade (69) | 5 | GRADE | Likely |
+| Case SubCode (92) | 58 | SUBCODE | Sure |
+| Case Type, TDA/TDI (269) | 6 | CASEIND | Needs checking |
+| Clsd ENTITY Method (292) | 39 | DISPCD | Needs checking |
+| Progname1 / Progname2 (349, 374) | 24 / 22 | PRGNAME1 / PRGNAME2 | Sure |
+| TDI Select (398) | 100 (00–99) | CCNIPSELECTCD | Needs checking |
+
+GM Case Assignment gets Case Grade and Case Type. I've assumed that covers both the domestic and international Case Assignment views. Every list count matches the spreadsheet's row count.
+
+**Confirm the guessed columns.** One query in TOAD covers all of them:
+
+```sql
+SELECT 'BODCD' col, COUNT(DISTINCT BODCD) n, '['||MIN(BODCD)||']' lo, '['||MAX(BODCD)||']' hi, MAX(LENGTH(BODCD)) len FROM EVIEW_MV
+UNION ALL SELECT 'CASECODE', COUNT(DISTINCT CASECODE), '['||MIN(CASECODE)||']', '['||MAX(CASECODE)||']', MAX(LENGTH(CASECODE)) FROM EVIEW_MV
+UNION ALL SELECT 'SUBCODE', COUNT(DISTINCT SUBCODE), '['||MIN(SUBCODE)||']', '['||MAX(SUBCODE)||']', MAX(LENGTH(SUBCODE)) FROM EVIEW_MV
+UNION ALL SELECT 'CASEIND', COUNT(DISTINCT CASEIND), '['||MIN(CASEIND)||']', '['||MAX(CASEIND)||']', MAX(LENGTH(CASEIND)) FROM EVIEW_MV
+UNION ALL SELECT 'CCNIPSELECTCD', COUNT(DISTINCT CCNIPSELECTCD), '['||MIN(CCNIPSELECTCD)||']', '['||MAX(CCNIPSELECTCD)||']', MAX(LENGTH(CCNIPSELECTCD)) FROM EVIEW_MV
+UNION ALL SELECT 'PRGNAME1', COUNT(DISTINCT PRGNAME1), '['||MIN(PRGNAME1)||']', '['||MAX(PRGNAME1)||']', MAX(LENGTH(PRGNAME1)) FROM EVIEW_MV
+UNION ALL SELECT 'PRGNAME2', COUNT(DISTINCT PRGNAME2), '['||MIN(PRGNAME2)||']', '['||MAX(PRGNAME2)||']', MAX(LENGTH(PRGNAME2)) FROM EVIEW_MV
+UNION ALL SELECT 'GRADE', COUNT(DISTINCT GRADE), '['||MIN(GRADE)||']', '['||MAX(GRADE)||']', NULL FROM EVIEW_MV
+UNION ALL SELECT 'DISPCD', COUNT(DISTINCT DISPCD), '['||MIN(DISPCD)||']', '['||MAX(DISPCD)||']', NULL FROM EVIEW_MV;
+```
+
+What the results should look like if the guesses are right:
+- **CASEIND:** about 6 values, from `[A]` to `[P]`.
+- **DISPCD:** from `[0]` to about `[99]`.
+- **CCNIPSELECTCD:** should look like `[00]` with a length of 2. If it shows `[5]` or `[ 5]`, the dropdown would send the wrong format, so tell me before testing.
+- **Any column:** a space just inside the opening bracket means that column needs padding like ARANK. All the other codes fill their full width, so I don't expect any.
+
+**Quick test once the edit is in**
+- In the Case view, Case Code should show 17 options.
+- Grade = 09 should return rows.
+- Module and Activity should only show the Priority dropdowns for now. That's expected.
+- If the Case dropdowns don't appear but Priority still does, the view isn't reaching the code as "CASE". Add `console.log(currentNav)` inside `mapDbColumnsToFields` and send me what it prints.
+
+**Spreadsheet questions for whoever owns it.** None of these block the work, and the code follows the sheet as written:
+- **Case SubCode, Time of Charge, code 324:** described as "ATAT COLLECTION STRATEGY". The other two SubCode lists call it "CAPTIVE INSURANCE ABUSE", so this looks like a copy error.
+- **Progname2:** it's missing the two "FC SECURE MESSAGING" values that Progname1 has.
+- **Code – BOD Client:** the row is highlighted yellow and has no values, so I skipped it.
+- **CSED/ASED:** I couldn't find a matching column in EVIEW_MV. The list is in the file, but it isn't attached to any field yet.
+- **Case Status:** it's marked "F6-Sort Only" for Inventory, so by design it gets no dropdown in the Case view.
+
+**For the next batch, starting at Disposition Code**
+- **Unhide column C.** Select columns B through D, right-click, and choose Unhide. Column C has the field names users see in Modern, which saves me guessing which database column each field is.
+- **Send the TOAD Columns tab for MVIEW_MV, AVIEW_MV and TVIEW_MV.** Once I have those, the Module, Activity and Time lists can be connected.
