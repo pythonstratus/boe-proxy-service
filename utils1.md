@@ -49,3 +49,41 @@ None of these need taxpayer names, TINs or balances on screen. Code and config a
 Padding in the UI still needs Santosh's OK on the acceptance-criteria wording, so ask him while you test.
 
 One question, because it changes how I write the rest: can you open this chat on your work machine to copy code, or are you typing it in by hand?
+
+
+
+#22
+
+The two columns we need are in your screenshots:
+
+- **ARANK, VARCHAR2(4):** almost certainly Priority Alpha (" 99a" is exactly 4 characters).
+- **RISK, NUMBER:** almost certainly Priority. Because it's a number column, it **never needs padding**. The " 99" in Legacy is just how the screen lines numbers up.
+
+I'm updating the file with those names now.
+
+`fieldListUtils.ts` is updated: the two placeholder column names are now ARANK and RISK. One query in TOAD confirms both guesses and the padding:
+
+```sql
+SELECT '[' || ARANK || ']' AS shown,
+       LENGTH(ARANK)       AS len,
+       RISK,
+       COUNT(*)            AS cnt
+  FROM EVIEW_MV
+ GROUP BY ARANK, RISK
+ ORDER BY RISK, ARANK;
+```
+
+**What we expect to see:**
+- Rows like `[ 99a]` with length 4 and RISK = 99.
+- Rows like `[100a]` with length 4 and RISK = 100.
+
+If you see that, it confirms ARANK is Priority Alpha, the padding is a leading space, and RISK is Priority. Send me a screenshot of the first 15 or so rows; the output shows only codes and counts.
+
+**Two things worth noting:**
+
+- **More columns may need the same check later.** Several other code columns are fixed-width text: CASECODE, SUBCODE, BODCLCD, ORG, TPCTRL and INDICATOR_STATUTE. If any of them gets a pick list later, run the same query on that column before adding it to `PADDED_WIDTH`.
+- **This also answers an open question on the Mandatory Accelerated backend.** MODELRANK looks like the model score whose existence was in doubt, so the "missing-data defect" risk in the README is probably resolved. The invented column names in that code are probably ARANK and MODELRANK.
+
+**Next screenshot after the query: QueryBuilderDateType.tsx.** It's still the main thing standing between us and a working dropdown.
+
+Small tip: crop the connection bar at the bottom of TOAD out of future photos, since it shows the database host name.
