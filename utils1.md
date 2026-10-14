@@ -201,3 +201,70 @@ What the results should look like if the guesses are right:
 **For the next batch, starting at Disposition Code**
 - **Unhide column C.** Select columns B through D, right-click, and choose Unhide. Column C has the field names users see in Modern, which saves me guessing which database column each field is.
 - **Send the TOAD Columns tab for MVIEW_MV, AVIEW_MV and TVIEW_MV.** Once I have those, the Module, Activity and Time lists can be connected.
+
+## 5
+
+Here's a Jira comment ready to paste. The "Dev testing" line in brackets is the only part you need to fill in.
+
+---
+
+**EN-1677: Query Builder pick lists and leading-space fix (UI)**
+
+**Problem**
+The Query Builder value field was free text. Some codes are stored right-aligned with a leading space. For example, Priority Alpha (`ARANK`, VARCHAR2(4)) is stored as " 99a". Searching for `99a` returned no records unless the user typed the space first.
+
+**Fix**
+- **Pick lists added** from the "Query Fields – Updated Field Names" spreadsheet: 52 lists, each shown only in the views the spreadsheet marks.
+  - Equals and Not Equals use a dropdown.
+  - In and Not In use a multi-select.
+  - Like and Not Like stay a text box.
+- **Padding at run time.** Values are padded to the stored width just before the query runs. Currently only Priority Alpha (ARANK, width 4) is padded. The Case-view code columns were checked in the database and fill their full width. Saved queries are stored without padding.
+- **Saved queries matched on load.** Values are matched to the dropdown when a saved query loads, ignoring case, extra spaces and leading zeros (for example, "9" matches "09").
+
+**Files**
+- `src/utils/fieldListUtils.ts` (new): the lists, which views each list appears in, and the padding.
+- `QueryBuilderHelper.ts`: one import and three one-line changes (`mapDbColumnsToFields`, `rqbToQueryWhereDTO`, `processColumnValue`).
+
+**Acceptance criteria note**
+Padding is done in the UI before the request is sent, not on the server as the last acceptance criterion says. Santosh needs to confirm this is acceptable or reword the criterion.
+
+**Dev testing**
+- Priority Alpha = 99a now returns records; before the fix it returned none. The request body shows " 99a".
+- Case view dropdowns verified.
+- [Module / Activity / Time / Employee / Case Assignment: add result]
+
+**How to test (QA)**
+1. Run Legacy and Modern side by side on the same day, in the same group, with the same output setting (Open). Priority Alpha = 99a: record counts match.
+2. Priority Alpha In 99a, 100a: record counts match.
+3. In each view, spot-check dropdowns against the Legacy pick lists:
+   - Case Code: 17 values
+   - Disposition Code: 39 in Module, 42 in Activity
+   - Time Code: 76
+   - Employee Grade: 10
+4. Like and Not Like still show a text box.
+5. Load a saved query created before this change. The correct option is selected and the results match.
+6. For the 99a query, the record count and the CSV export match the grid.
+
+**Open questions for the spreadsheet owner**
+- **Case SubCode – Time of Charge, code 324:** the description says "ATAT COLLECTION STRATEGY", but the other SubCode lists say "CAPTIVE INSURANCE ABUSE".
+- **Code – Progname2:** it's missing the two "FC SECURE MESSAGING" values that Progname1 has.
+- **"FC SECURE MESSAGING DECLINED/DENIED":** it's 35 characters, but the longest stored program name is 27, so this option can't match any record.
+- **Indicator – ASED (Module):** its values (TFR ASSESSED, NO RESPONSIBLE OFFICER…) read like a Trust Fund Recovery Penalty (TFRP) indicator, not ASED.
+- **Title:** every value ends with " -" in the sheet. The dropdown uses the title without the dash.
+- **No dropdown:** Code – BOD Client and Indicator – Income AGI/TPI have no values in the sheet.
+
+**For product**
+Legacy's pick lists cover 58 of the 293 SubCodes and 24 of the 66 Program Names in the data. The other values can still be searched with Like.
+
+---
+
+**No, the tester doesn't need the SQL scripts.** They should test through the screen against Legacy, using the steps in the note.
+- **They're your checks, not test steps.** `picklist_check.sql` confirms the column choices and padding. Run it yourself before handing off.
+- **The counts wouldn't line up anyway.** The app filters by the user's group and output setting, so a raw count in TOAD won't match the screen. Testers often don't have database access either.
+
+**Before you post:**
+- **Run both queries in `picklist_check.sql`.** If query 1 shows values like `[ 5]` or `[5]`, send me a screenshot. TDI Select would then need the same padding treatment, and the "only Priority Alpha is padded" line would change.
+- **Fill in the Dev testing line** with the console results from the other views.
+
+**Separate from this ticket:** the fix confirms Priority Alpha is stored with a leading space. That means the Mandatory Accelerated `EligibilitySql` filter `priority_alpha IN ('99a', …)` will match nothing until it trims the value.
+
