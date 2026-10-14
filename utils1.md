@@ -87,3 +87,45 @@ If you see that, it confirms ARANK is Priority Alpha, the padding is a leading s
 **Next screenshot after the query: QueryBuilderDateType.tsx.** It's still the main thing standing between us and a working dropdown.
 
 Small tip: crop the connection bar at the bottom of TOAD out of future photos, since it shows the database host name.
+
+## 3
+
+The fallthrough in `CustomValueEditor` is good news. Before I confirm the three edits, I'm checking the operator names in `rqbToQueryWhereDTO` against the padding code.
+
+No changes are needed in `QueryBuilderDateType.tsx`. Lines 107 to 109 send every field that isn't a date to the library's standard `ValueEditor`, and that editor already draws a dropdown from a field's `values` list. So the one-to-two-hour risk from standup is gone. I also checked the operator names in `rqbToQueryWhereDTO`: they're `=`, `<>`, `IN` and `NOT IN`, which is what `padForRun` expects.
+
+**Edits in QueryBuilderHelper.ts, in order**
+
+1. **Add an import at the top.** Change the path if you didn't put the file in `src/utils/`:
+   ```ts
+   import { withPickList, padForRun, matchPickListValue } from "@/utils/fieldListUtils";
+   ```
+2. **Line 427**, the `});` that closes `mapDbColumnsToFields`. Change it to:
+   ```ts
+   }).map(withPickList);
+   ```
+3. **Lines 210 and 211**, the `value:` line in `rqbToQueryWhereDTO`. Replace it with:
+   ```ts
+   value: runningQuery ? padForRun(rule.field, backendOperator, formatValueByColumnType(columns, {field: rule.field, value: String(rule.value)})) : String(rule.value),
+   ```
+4. **First line inside `processColumnValue`:**
+   ```ts
+   value = matchPickListValue(name, value);
+   ```
+   I don't have a screenshot of that function. If its parameters aren't called `name` and `value`, use whatever it calls the column name and the value.
+
+**Test it (about 15 minutes)**
+
+- **Dropdown shows:** open the Case query builder and pick Priority Alpha. You should get a dropdown of 110 entries like "99a – PRIORITY LEVEL 99a".
+- **Padding reaches the server:** choose `=` and `99a`, then press F12, open the Network tab, and run the query. The request body should show `"value":" 99a"` with the leading space.
+  - If it does, compare the record count with Legacy run on the same day.
+  - If the space is there but you still get 0 rows, the Java backend is trimming it. Send me that class.
+- **In:** select 99a and 100a. The request body should show `" 99a, 100a"`, which is each code padded on its own.
+- **Like:** it should still be a plain text box, with no padding.
+- **Priority:** it should be a dropdown of 22 numbers, with no padding.
+- **Saved query:** load an old one that has 99a. The dropdown should show 99a selected.
+- **Export:** CSV export of the 99a query should return the same rows as the grid.
+
+**Still pending:** the ARANK check query from earlier. If it shows `[99a ]` with the space at the end instead of the front, tell me before you test, because the padding would be on the wrong side.
+
+**Separate from this ticket:** line 107 of `QueryBuilderDateType.tsx` checks for `'empty'` and `'notEmpty'`, but the operators are actually named `'null'` and `'notNull'`. So date fields still show a date picker when Empty is selected. That's a one-word fix, but I'd keep it out of this pull request.
