@@ -1,25 +1,51 @@
-Here's a version short enough to say in standup.
+Yes, UI first works. I'm writing the pick-list file now; the two Priority lists follow a fixed pattern, so they don't need screenshots.
 
-**Status**
-"EN-1677 is in progress. The approach is settled and the first file is written. The main work is in one helper file, not the large Query Builder component."
+`fieldListUtils.ts` is ready. It has the Priority and Priority Alpha lists plus three helpers. The comments are optional if you're typing it in by hand.
 
-**Complexity**
-- **Dropdowns: low.** The library supports dropdowns out of the box. It's three small edits in one helper file, and the Priority lists are already built.
-- **Padding: medium.** The rule itself is simple: add leading spaces back to the stored width before the query runs. The care is in applying it only to the right columns, handling multi-value In lists, and making sure older saved queries still load.
-- **One unknown: the custom value editor.** It currently controls every input in the builder. If it blocks dropdowns, that adds one to two hours.
-- **Remaining pick lists: data entry, not logic.** This is copying values from the spreadsheet into the same file, with no new code.
+**Three one-line edits in QueryBuilderHelper.ts**
 
-**What's realistic in the next four hours**
-- **Done today:** dropdowns plus padding for Priority Alpha, end to end. That covers the ticket's 99a scenario. It will be tested side by side against Legacy, and every other field can take a dropdown once its list is entered.
-- **Likely a follow-up:**
-  - The remaining pick lists. That's roughly half a day to a day, depending on how many fields there are.
-  - Moving padding to the server, if Santosh wants the acceptance criteria met as written.
+1. At the end of `mapDbColumnsToFields`, change the final `});` to:
+   ```ts
+   }).map(withPickList);
+   ```
+2. In `rqbToQueryWhereDTO`, wrap the run-time value:
+   ```ts
+   value: runningQuery ? padForRun(rule.field, backendOperator, formatValueByColumnType(columns, {field: rule.field, value: String(rule.value)})) : String(rule.value),
+   ```
+3. Make this the first line inside `processColumnValue`:
+   ```ts
+   value = matchPickListValue(name, value);
+   ```
 
-**Risks**
-- The custom value editor needing rework.
-- The real column names and padded widths still need a database check.
-- Thomas is working in the same files for the re-run defect.
+These work as long as `CustomValueEditor` hands non-date fields to the standard editor. That's the first screenshot below.
 
-**Asks**
-- Santosh: is UI-side padding acceptable, or must it be on the server as the acceptance criteria say?
-- Someone with database access: run a quick query to confirm which columns are padded.
+**Screenshots I need, most important first**
+
+1. **QueryBuilderDateType.tsx, the whole file.** It decides whether the dropdowns render at all.
+2. **QueryBuilderConstant.ts.** Use Ctrl+F for `PRIOR` and send those lines plus `getSafeFieldValue`. That gives me the real column names to replace the two TODOs.
+3. **package.json, just the `react-querybuilder` line.** The version changes some details of the field setup.
+4. **Small snippets from QueryBuilderComponent.tsx.** Send a few lines around each `rqbToQueryWhereDTO(` call and around the export handler (search `ExportUrl`). I need to confirm that run, count and export all go through the padding.
+5. **A database check, if anyone has SQL access.** It shows only codes, no taxpayer data:
+   ```sql
+   SELECT '[' || <alpha_col> || ']', LENGTH(<alpha_col>), COUNT(*) FROM EVIEW_MV GROUP BY <alpha_col>;
+   ```
+   Run it again for the Priority column. That tells us whether Priority needs padding too.
+6. **If there's time, spreadsheet photos of the other pick lists** (Time Code, Activity Report and the rest). I'll transcribe them. Adding them is data entry only, no code changes.
+
+None of these need taxpayer names, TINs or balances on screen. Code and config are enough.
+
+**The four hours**
+
+- **First hour:** screenshots in, column names filled, file in place.
+- **Second hour:** the three edits, plus any `CustomValueEditor` fix, until the dropdown renders.
+- **Third hour:** testing:
+  - 99a returns the same records as Legacy, run side by side.
+  - The In list works.
+  - A saved query reloads correctly.
+  - Like searches still work.
+  - The other views are unaffected.
+- **Fourth hour:** remaining lists and the pull request.
+
+Padding in the UI still needs Santosh's OK on the acceptance-criteria wording, so ask him while you test.
+
+One question, because it changes how I write the rest: can you open this chat on your work machine to copy code, or are you typing it in by hand?
