@@ -419,6 +419,14 @@ const IDRS_PYRAMID = parse(`
 9|NO FORM941
 `);
 
+// The sheet lists one value for each and does not mark them "Pick list available".
+const HINF = parse(`
+1|YES
+`);
+const INDICATOR_941 = parse(`
+1|YES - 8+ TDAs in last 14 QTRs
+`);
+
 const IRS_EMPLOYEE = parse(`
 0|NO
 1|PRIMARY
@@ -698,7 +706,7 @@ export const PICK_LISTS = {
     BOD_DIVISION, CASE_CODE, CASE_GRADE, STATUS, CASE_SUBCODE, CASE_SUBCODE_CURRENT, CASE_SUBCODE_TOC,
     CASE_TYPE, DISPOSITION, DISPOSITION_NOT_ACTIVITY, FTL_CODE, PROGNAME1, PROGNAME2, TDI_SELECT,
     CONTACT_CODE, CSED_ASED, EMPLOYEE_TYPE, DISASTER_VICTIM, QUEUE_PICK, EMPLOYEE_GRADE, ICS_ACCESS,
-    ASED_MODULE, AGE_INDICATOR, CAUTION, CSED_MODULE, ENTITY_ICS, FATCA, IDRS_PYRAMID, IRS_EMPLOYEE,
+    HINF, INDICATOR_941, ASED_MODULE, AGE_INDICATOR, CAUTION, CSED_MODULE, ENTITY_ICS, FATCA, IDRS_PYRAMID, IRS_EMPLOYEE,
     LARGE_DOLLAR, LFI_CASE, LFI_MODULE, LLC, POA, REPEATER, PERCENT, INV_ADJUST_REASON, MFT,
     POSITION_TYPE, ACTIVITY_REPORT, TIME_CODE, TIME_CODE_DEFINER, TIN_FILE_SOURCE, TIN_TYPE, TITLE,
     TOUR_OF_DUTY, MODULE_TYPE,
@@ -753,7 +761,7 @@ export const PICK_LIST_FIELDS: PickListField[] = [
     { control: 374, names: ["Code - Progname2"], views: [INV, MOD, TIME], list: PROGNAME2, column: "PRGNAME2" },
     { control: 398, names: ["Code - TDI Select"], views: [INV, MOD], list: TDI_SELECT, column: "CCNIPSELECTCD" },
     { control: 400, names: ["Contact Code"], views: [TIME], list: CONTACT_CODE },
-    { control: 412, names: ["CSED/ASED"], views: [INV], list: CSED_ASED },
+    { control: 412, names: ["CSED/ASED", "Indicator - Statute"], views: [INV], list: CSED_ASED, column: "INDICATOR_STATUTE" },
     { control: 451, names: ["Disposition Code"], views: [MOD], list: DISPOSITION_NOT_ACTIVITY },
     { control: 451, names: ["Disposition Code"], views: [ACT], list: DISPOSITION },
     { control: 495, names: ["Employee Type"], views: [EMP], list: EMPLOYEE_TYPE },
@@ -761,6 +769,7 @@ export const PICK_LIST_FIELDS: PickListField[] = [
     { control: 510, names: ["Flag - Queue Pick"], views: [INV, ...GM], list: QUEUE_PICK },
     { control: 521, names: ["Grade - Employee", "Employee Grade"], views: [EMP], list: EMPLOYEE_GRADE },
     { control: 537, names: ["ICS Access"], views: [EMP], list: ICS_ACCESS },
+    { control: 551, names: ["Indicator - 941"], views: [INV, MOD, ...GM], list: INDICATOR_941 },
     { control: 552, names: ["Indicator - ASED (Module)"], views: [MOD], list: ASED_MODULE },
     { control: 559, names: ["Indicator - Case Age"], views: [INV], list: AGE_INDICATOR },
     { control: 563, names: ["Indicator - Caution (Case)"], views: [INV, MOD], list: CAUTION },
@@ -771,6 +780,7 @@ export const PICK_LIST_FIELDS: PickListField[] = [
     { control: 579, names: ["Indicator - FATCA"], views: [INV, MOD], list: FATCA },
     { control: 584, names: ["Indicator - Federal Contractor"], views: [INV], list: NO_YES_01 },
     { control: 587, names: ["Indicator - Federal Employee", "Indicatory - Federal Employee"], views: [INV], list: NO_YES_01 },
+    { control: 590, names: ["Indicator - HINF"], views: [INV, MOD, ...GM], list: HINF },
     { control: 592, names: ["Indicator - IDRS Pyramid (Case)"], views: [INV, MOD], list: IDRS_PYRAMID },
     { control: 597, names: ["Indicator - IDRS Pyramid (Module)"], views: [MOD], list: IDRS_PYRAMID },
     { control: 603, names: ["Indicator - Innocent Spouse"], views: [INV, MOD], list: NO_YES_NY },
@@ -802,7 +812,6 @@ export const PICK_LIST_FIELDS: PickListField[] = [
     { control: 1040, names: ["Tour of Duty (TOD)", "Tour of Duty"], views: [TIME, EMP], list: TOUR_OF_DUTY },
     { control: 1046, names: ["Type - TDA, TDI, Etc (Module)"], views: [MOD, ACT], list: MODULE_TYPE },
     // Left out on purpose: Code - BOD Client and Indicator - Income AGI/TPI (no values in the sheet),
-    // Indicator - 941 and Indicator - HINF (one value, not marked "Pick list available"),
     // INV Warning and Time Code Description ("F6-Sort Only").
 ];
 
