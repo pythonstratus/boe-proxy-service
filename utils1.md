@@ -268,3 +268,33 @@ Legacy's pick lists cover 58 of the 293 SubCodes and 24 of the 66 Program Names 
 
 **Separate from this ticket:** the fix confirms Priority Alpha is stored with a leading space. That means the Mandatory Accelerated `EligibilitySql` filter `priority_alpha IN ('99a', …)` will match nothing until it trims the value.
 
+## helper
+
+Yes. It can go in the front end, and I don't need to see more code. The value is built in `rqbToQueryWhereDTO` before it's sent, so we can add the `%` there, the same way we add the padding. The backend just receives `%smith%`. I'll write it and test it now.
+
+It's done on the front end, with no backend change, and it's tested. When a Like or Not Like value has no wildcard, it's wrapped in `%` just before the query runs. If the user types their own pattern, it's sent exactly as typed.
+
+| User types (Like) | Sent to backend |
+|---|---|
+| `SMITH` | `%SMITH%` (contains) |
+| `SMI%` | `SMI%` (starts with, as typed) |
+| `%SMITH%` | `%SMITH%` (the Legacy habit still works) |
+| Priority Alpha `99a` | `% 99a%` (still matches only 99a, not 399a) |
+
+Equals, In and the comparison operators don't change. Saved queries keep the value exactly as the user typed it, because the `%` is only added when the query runs.
+
+**Two edits in QueryBuilderHelper.ts:**
+
+1. In the import line, change `padForRun` to `prepareForRun`:
+   ```ts
+   import { withPickList, prepareForRun, matchPickListValue } from "@/utils/fieldListUtils";
+   ```
+2. In `rqbToQueryWhereDTO`, on the `value:` line, change `padForRun(` to `prepareForRun(`. The arguments stay the same.
+
+The updated `fieldListUtils.ts` has the new function plus all of today's other changes.
+
+**Test:** run a Like on a name field with a partial name. In the Network tab, the value should show `%...%`, and the results should include every name that contains it.
+
+**Two things to know:**
+- **This differs a little from Legacy.** The spreadsheet tells Legacy users to type the `%` themselves; there, Like without `%` acts like Equals. Modern now treats plain text as "contains", and typed patterns still work. I think that's what users expect from an operator labeled Like, but mention it to Santosh so it's a deliberate choice.
+- **Like is still case-sensitive in Oracle.** `smith` won't match `SMITH`. If testers report that, it's a separate fix: uppercase the value for Like on text fields.
