@@ -816,8 +816,8 @@ export const PADDED_WIDTH: Record<string, number> = {
     ARANK: 4,
 };
 
-// Backend operator names.
-const EXACT_OPERATORS = new Set(["=", "<>", "IN", "NOT IN"]);
+// Backend operator names. Comparisons are padded too: " 99a" < "100a" only holds with the space.
+const EXACT_OPERATORS = new Set(["=", "<>", "IN", "NOT IN", "<", ">", "<=", ">="]);
 const LIKE_OPERATORS = new Set(["LIKE", "NOT LIKE"]);
 
 /* ------------------------------------------------------------------ */
@@ -886,6 +886,26 @@ const noteForReport = (view: string, field: Field, listed: boolean): void => {
 /* Helpers used by QueryBuilderHelper.ts                               */
 /* ------------------------------------------------------------------ */
 
+type OperatorOption = { name: string; label: string };
+const COMPARISON_OPERATORS: OperatorOption[] = [
+    { name: "<", label: "<" },
+    { name: ">", label: ">" },
+    { name: "<=", label: "<=" },
+    { name: ">=", label: ">=" },
+];
+
+/**
+ * Text columns get no <, >, <=, >= in mapDbColumnsToFields; number and date columns do.
+ * Pick-list codes are ordered (Priority Alpha > 101a, Case Code >= 300), so add them after "<>".
+ */
+const withComparisons = (operators: Field["operators"]): Field["operators"] => {
+    if (!Array.isArray(operators) || !operators.length) return operators;
+    const ops = operators as OperatorOption[];
+    if (!ops.every((o) => typeof o?.name === "string") || ops.some((o) => o.name === ">")) return operators;
+    const at = ops.findIndex((o) => o.name === "!=") + 1; // 0 when there is no "!=": put them first
+    return [...ops.slice(0, at), ...COMPARISON_OPERATORS, ...ops.slice(at)] as Field["operators"];
+};
+
 /** Adds a dropdown to a field when the spreadsheet has a pick list for it in this view. */
 export const withPickList = (field: Field, view: string): Field => {
     const viewName = String(view ?? "").toUpperCase();
@@ -899,6 +919,7 @@ export const withPickList = (field: Field, view: string): Field => {
 
     return {
         ...field,
+        operators: withComparisons(field.operators),
         values: list.map((o) => ({ name: o.code, label: optionLabel(o) })),
         valueEditorType: (op: string): ValueEditorType =>
             op === "in" || op === "notIn"
