@@ -939,16 +939,46 @@ export const withPickList = (field: Field, view: string): Field => {
     };
 };
 
+/** Every pick list known for a DB column. */
+const listsForColumn = (field: string): PickOption[][] =>
+    [
+        ALL_VIEWS[field],
+        ...(attachedByColumn.get(field) ?? []),
+        ...PICK_LIST_FIELDS.filter((d) => d.column === field).map((d) => d.list),
+    ].filter((l): l is PickOption[] => !!l);
+
+/**
+ * Like on a right-aligned code, with no % or _ typed:
+ *  - a whole code ("99a") matches that code only:            " 99a"
+ *  - the start of a code ("99", "10") matches every code
+ *    that starts with it, lined up the way it is stored:      " 99%"  "10%"
+ *  - anything else is left unpadded and searched as text.
+ * Padding a partial value to the full width ("  99") would match nothing,
+ * and leaving it unpadded ("%99%") would also return 399a - 399e.
+ */
+const likeForPaddedCode = (field: string, width: number, typed: string): string => {
+    const lower = typed.toLowerCase();
+    const codes = listsForColumn(field).flat().map((o) => o.code);
+    const exact = codes.find((c) => c.toLowerCase() === lower);
+    if (exact) return exact.padStart(width, " ");
+    const starts = codes.filter((c) => c.toLowerCase().startsWith(lower));
+    const pads = new Set(starts.map((c) => width - c.length));
+    if (pads.size === 1) {
+        const [pad] = [...pads];
+        if (pad >= 0) return " ".repeat(pad) + starts[0].slice(0, typed.length) + "%";
+    }
+    return typed;
+};
+
 /** Run time only: pads each value back to the stored width. */
 export const padForRun = (field: string, backendOp: string, value: string): string => {
     const width = PADDED_WIDTH[field];
     if (!width) return value;
     const op = String(backendOp ?? "").toUpperCase();
     if (LIKE_OPERATORS.has(op)) {
-        // No % or _ typed: treat it like Equals, so "99a" finds " 99a" and not "399a".
         // With wildcards, the user's pattern is sent exactly as typed.
         const t = value.trim();
-        return !t || /[%_]/.test(t) ? value : t.padStart(width, " ");
+        return !t || /[%_]/.test(t) ? value : likeForPaddedCode(field, width, t);
     }
     if (!EXACT_OPERATORS.has(op)) return value;
     return value
@@ -976,11 +1006,7 @@ export const prepareForRun = (field: string, backendOp: string, value: string): 
 /** Saved-query load: maps " 99a", "99A" or "9" back to the option code. Leaves anything else as it was. */
 export const matchPickListValue = (field: string, value: unknown): unknown => {
     if (typeof value !== "string") return value;
-    const lists = [
-        ALL_VIEWS[field],
-        ...(attachedByColumn.get(field) ?? []),
-        ...PICK_LIST_FIELDS.filter((d) => d.column === field).map((d) => d.list),
-    ].filter((l): l is PickOption[] => !!l);
+    const lists = listsForColumn(field);
     if (!lists.length) return value;
     return value
         .split(",")
