@@ -960,6 +960,19 @@ export const padForRun = (field: string, backendOp: string, value: string): stri
         .join(",");
 };
 
+/**
+ * Run time only. Use this in rqbToQueryWhereDTO in place of padForRun.
+ * Pads codes (see padForRun), then wraps a plain Like / Not Like value in %, so Like means "contains".
+ * A value the user already wrote as a pattern (it has % or _) is sent exactly as typed.
+ * Saved queries keep the value as typed, because this only runs when the query runs.
+ */
+export const prepareForRun = (field: string, backendOp: string, value: string): string => {
+    const padded = padForRun(field, backendOp, value);
+    if (!LIKE_OPERATORS.has(String(backendOp ?? "").toUpperCase())) return padded;
+    if (!padded.trim() || /[%_]/.test(padded)) return padded;
+    return `%${padded}%`; // Priority Alpha " 99a" becomes "% 99a%", which still matches only 99a
+};
+
 /** Saved-query load: maps " 99a", "99A" or "9" back to the option code. Leaves anything else as it was. */
 export const matchPickListValue = (field: string, value: unknown): unknown => {
     if (typeof value !== "string") return value;
