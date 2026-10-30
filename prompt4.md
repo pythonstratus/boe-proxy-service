@@ -132,3 +132,30 @@ Haiku is useful in two places:
 - **File searching during Fable sessions.** The tip from before still applies: define a project subagent named `Explore` with `model: haiku`, and Fable's file searching runs on Haiku instead of Opus.
 
 Since Opus is now the most expensive part of the build, the token-saving advice matters more: skip the generated and vendored folders, and refresh incrementally instead of rebuilding.
+
+
+Yes, that works. Two things are worth knowing first.
+
+**You don't have to tell Claude to read the memory.** The `CLAUDE.md` files load on their own when you start Claude from the same folder. Naming the specific reference docs is still worth it, because those load only when Claude opens them.
+
+**A folder with only the changed files can't be built or tested.** It would hold a few edited files with none of the project around them, so you couldn't confirm the fix works. The better version of your idea is a **git worktree**: a full, separate copy of the code in its own folder (for example `fix-123/`) on its own branch. Your originals stay untouched, Claude can build and run tests in the copy, and merging the fix back is a normal git merge or pull request.
+
+Here's a prompt you can reuse. Start a Fable session from the same folder as before and fill in the first line:
+
+```
+Issue 123: <paste the requirement / bug description / error message / steps to reproduce>
+
+1. Start from the codebase memory: the CLAUDE.md files and the relevant docs in docs/claude-memory/ (api-contract.md, flows.md, debugging-guide.md). If memory and code disagree, trust the code and note the discrepancy.
+2. Trace the issue through entity-ui and entity-service and find the root cause, with file:line evidence. Show me the root cause and the proposed fix, and wait for my OK before changing anything.
+3. Do not modify the original folders. Create a git worktree on a new branch named fix-123, in a folder named fix-123 placed outside the existing working tree(s) so git doesn't see it as untracked files. If entity-service and entity-ui are separate repos, create one worktree per repo: fix-123/entity-service and fix-123/entity-ui. Make all changes there.
+4. Build and run the relevant tests in the worktree. Add a test that reproduces the bug if that's practical.
+5. Write fix-123/FIX-NOTES.md (root cause, files changed, how it was verified, risks) and save the full diff as fix-123/fix-123.patch. Don't commit or push unless I ask.
+6. If the fix shows the memory was wrong or incomplete, list the memory updates you'd make, but don't apply them until I approve.
+```
+
+A few practical notes:
+
+- **Permission prompt:** if the `fix-123` folder ends up outside the folder you launched Claude from, Claude will ask permission the first time it writes there. Approve it.
+- **The checkpoint in step 2 saves money.** Fable confirms the diagnosis with you before it spends tokens on edits and test runs.
+- **When you're happy with the fix**, merge the `fix-123` branch or open a pull request from it, then remove the worktree. Claude can do both if you ask.
+- **If you really want plain copies with no git**, Claude can copy just the changed files into `fix-123/` with the same folder structure, plus a patch file. You'd only be able to review those, not run them.
