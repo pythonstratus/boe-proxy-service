@@ -1,5 +1,5 @@
 -- =============================================================================
--- entact_dedup_extrdt_2026-10-01.sql
+-- entact_dedup_extrdt_2026-10-01.sql   (version 2 - no DBMS_SQL needed)
 --
 -- Removes duplicate rows from ENTITY.ENTACT for EXTRDT = 10/01/2026 ONLY,
 -- keeping the earliest-loaded copy (lowest INPUTTIME) of each row.
@@ -19,6 +19,7 @@
 --   2. Press F5 (Execute as Script). Read the "Script Output" tab.
 --   3. If the summary looks right, run COMMIT. Otherwise run ROLLBACK.
 --      Nothing is saved until you do one of those.
+--   Safe to re-run: the backup step keeps an existing backup.
 -- =============================================================================
 
 SET SERVEROUTPUT ON SIZE UNLIMITED
@@ -39,16 +40,29 @@ AND    table_name  = 'ENTACT';
 
 
 -- -----------------------------------------------------------------------------
--- STEP 1. Back up the rows in scope
+-- STEP 1. Back up the rows in scope (only if the backup doesn't exist yet)
 -- -----------------------------------------------------------------------------
 -- Copies every EXTRDT = 10/01/2026 row, which is everything Step 2 can delete.
--- CREATE TABLE ... AS SELECT is DDL, so it commits on its own.
--- On a re-run this fails with ORA-00955 (name already used). That is fine:
--- the existing backup is kept and Step 2 re-checks it.
-CREATE TABLE ENTACT_BKP_EXTR20261001 AS
-SELECT *
-FROM   ENTITY.ENTACT
-WHERE  extrdt = TO_DATE('10/01/2026', 'mm/dd/yyyy');
+-- The backup table is created in the schema you are logged in as.
+DECLARE
+  v_exists NUMBER;
+BEGIN
+  SELECT COUNT(*)
+  INTO   v_exists
+  FROM   user_tables
+  WHERE  table_name = 'ENTACT_BKP_EXTR20261001';
+
+  IF v_exists = 0 THEN
+    EXECUTE IMMEDIATE
+      'CREATE TABLE ENTACT_BKP_EXTR20261001 AS '
+      || 'SELECT * FROM ENTITY.ENTACT '
+      || 'WHERE extrdt = TO_DATE(''10/01/2026'', ''mm/dd/yyyy'')';
+    DBMS_OUTPUT.PUT_LINE('Backup ENTACT_BKP_EXTR20261001 created.');
+  ELSE
+    DBMS_OUTPUT.PUT_LINE('Backup ENTACT_BKP_EXTR20261001 already exists - keeping it.');
+  END IF;
+END;
+/
 
 -- Both numbers should be identical
 SELECT (SELECT COUNT(*)
@@ -61,23 +75,23 @@ FROM   dual;
 -- -----------------------------------------------------------------------------
 -- STEP 2. Delete the duplicates (keeps the earliest-loaded copy of each row)
 -- -----------------------------------------------------------------------------
--- * Reads ENTACT's column list itself, so nothing needs editing.
+-- * Reads ENTACT's column list from ALL_TAB_COLUMNS, so nothing needs editing.
 -- * Refuses to run if the backup is missing or its row count does not match.
 -- * Checks its own work and rolls back if anything does not add up.
 -- * Does NOT commit.
 DECLARE
-  c_table    CONSTANT VARCHAR2(128)  := 'ENTITY.ENTACT';
-  c_backup   CONSTANT VARCHAR2(128)  := 'ENTACT_BKP_EXTR20261001';
-  c_scope    CONSTANT VARCHAR2(4000) :=
-             'extrdt = TO_DATE(''10/01/2026'', ''mm/dd/yyyy'')';
+  c_owner       CONSTANT VARCHAR2(128)  := 'ENTITY';
+  c_table_name  CONSTANT VARCHAR2(128)  := 'ENTACT';
+  c_table       CONSTANT VARCHAR2(261)  := c_owner || '.' || c_table_name;
+  c_backup      CONSTANT VARCHAR2(128)  := 'ENTACT_BKP_EXTR20261001';
+  c_scope       CONSTANT VARCHAR2(4000) :=
+                'extrdt = TO_DATE(''10/01/2026'', ''mm/dd/yyyy'')';
   -- Columns left out of the comparison (upper case, wrapped in commas)
-  c_ignore   CONSTANT VARCHAR2(4000) := ',INPUTTIME,';
+  c_ignore      CONSTANT VARCHAR2(4000) := ',INPUTTIME,';
   -- Which copy to keep: earliest INPUTTIME. Change ASC to DESC to keep the latest.
-  c_keep     CONSTANT VARCHAR2(4000) := '"INPUTTIME" ASC';
+  c_keep        CONSTANT VARCHAR2(4000) := '"INPUTTIME" ASC';
 
-  v_cur          INTEGER;
-  v_col_cnt      INTEGER;
-  v_desc         DBMS_SQL.DESC_TAB2;
+  v_col_cnt      INTEGER := 0;
   v_cols_all     VARCHAR2(32767);
   v_cols_cmp     VARCHAR2(32767);
   v_ignored      VARCHAR2(1000);
@@ -98,47 +112,46 @@ DECLARE
     DBMS_OUTPUT.PUT_LINE(p_text);
   END;
 BEGIN
-  -- 2a. Read ENTACT's columns
-  v_cur := DBMS_SQL.OPEN_CURSOR;
-  BEGIN
-    DBMS_SQL.PARSE(v_cur, 'SELECT * FROM ' || c_table, DBMS_SQL.NATIVE);
-    DBMS_SQL.DESCRIBE_COLUMNS2(v_cur, v_col_cnt, v_desc);
-    DBMS_SQL.CLOSE_CURSOR(v_cur);
-  EXCEPTION
-    WHEN OTHERS THEN
-      IF DBMS_SQL.IS_OPEN(v_cur) THEN
-        DBMS_SQL.CLOSE_CURSOR(v_cur);
-      END IF;
-      RAISE;
-  END;
+  -- 2a. Read ENTACT's columns from the data dictionary
+  FOR c IN (SELECT column_name, data_type, data_type_owner
+            FROM   all_tab_columns
+            WHERE  owner      = c_owner
+            AND    table_name = c_table_name
+            ORDER  BY column_id)
+  LOOP
+    v_col_cnt := v_col_cnt + 1;
 
-  FOR i IN 1 .. v_col_cnt LOOP
-    -- Column types Oracle cannot compare row-to-row:
-    -- 8 LONG, 24 LONG RAW, 109 object/XMLTYPE, 111 REF, 112 CLOB/NCLOB,
-    -- 113 BLOB, 114 BFILE, 119 JSON, 122 nested table, 123 VARRAY
-    IF v_desc(i).col_type IN (8, 24, 109, 111, 112, 113, 114, 119, 122, 123) THEN
-      v_bad_cols := SUBSTR(v_bad_cols || v_desc(i).col_name || ' ', 1, 1000);
+    -- Column types Oracle cannot compare row-to-row
+    IF c.data_type IN ('CLOB', 'NCLOB', 'BLOB', 'BFILE', 'LONG', 'LONG RAW',
+                       'XMLTYPE', 'JSON')
+       OR c.data_type_owner IS NOT NULL THEN
+      v_bad_cols := SUBSTR(v_bad_cols || c.column_name || ' ', 1, 1000);
     END IF;
 
     v_cols_all := v_cols_all || CASE WHEN v_cols_all IS NOT NULL THEN ', ' END
-                             || '"' || v_desc(i).col_name || '"';
+                             || '"' || c.column_name || '"';
 
-    IF INSTR(c_ignore, ',' || v_desc(i).col_name || ',') > 0 THEN
-      v_ignored := v_ignored || v_desc(i).col_name || ' ';
+    IF INSTR(c_ignore, ',' || c.column_name || ',') > 0 THEN
+      v_ignored := v_ignored || c.column_name || ' ';
     ELSE
       v_cols_cmp := v_cols_cmp || CASE WHEN v_cols_cmp IS NOT NULL THEN ', ' END
-                               || '"' || v_desc(i).col_name || '"';
+                               || '"' || c.column_name || '"';
     END IF;
   END LOOP;
 
-  IF v_bad_cols IS NOT NULL THEN
+  IF v_col_cnt = 0 THEN
     RAISE_APPLICATION_ERROR(-20001,
+      'Cannot see ' || c_table || ' in ALL_TAB_COLUMNS. Nothing deleted.');
+  END IF;
+
+  IF v_bad_cols IS NOT NULL THEN
+    RAISE_APPLICATION_ERROR(-20002,
       'ENTACT has LOB/LONG/object columns that cannot be compared directly: '
       || v_bad_cols || '. Nothing deleted.');
   END IF;
 
   IF v_ignored IS NULL THEN
-    RAISE_APPLICATION_ERROR(-20002,
+    RAISE_APPLICATION_ERROR(-20003,
       'Column INPUTTIME not found in ' || c_table || '. Nothing deleted.');
   END IF;
 
@@ -162,13 +175,13 @@ BEGIN
     EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM ' || c_backup INTO v_backup_cnt;
   EXCEPTION
     WHEN OTHERS THEN
-      RAISE_APPLICATION_ERROR(-20003,
+      RAISE_APPLICATION_ERROR(-20004,
         'Backup table ' || c_backup || ' not found (' || SQLERRM
         || '). Run Step 1 first. Nothing deleted.');
   END;
 
   IF v_backup_cnt <> v_total THEN
-    RAISE_APPLICATION_ERROR(-20004,
+    RAISE_APPLICATION_ERROR(-20005,
       'Backup ' || c_backup || ' has ' || v_backup_cnt || ' rows but there are '
       || v_total || ' rows in scope. Nothing deleted. '
       || '(If you already ran and committed this cleanup, it is done.)');
@@ -176,6 +189,7 @@ BEGIN
 
   say('-------------------------------------------------------------');
   say('Scope                       : ' || c_table || ' where ' || c_scope);
+  say('Columns compared            : ' || (v_col_cnt - 1) || ' of ' || v_col_cnt);
   say('Columns ignored             : ' || RTRIM(v_ignored));
   say('Rows in scope               : ' || v_total);
   say('Exact copies (every column) : ' || v_exact);
@@ -209,7 +223,7 @@ BEGIN
      OR v_dupes_after <> 0
      OR v_remaining <> v_total - v_dupes THEN
     ROLLBACK;
-    RAISE_APPLICATION_ERROR(-20005,
+    RAISE_APPLICATION_ERROR(-20006,
       'Check failed (deleted ' || v_deleted || ', expected ' || v_dupes
       || ', remaining ' || v_remaining || ', duplicates left ' || v_dupes_after
       || '). All changes rolled back.');
